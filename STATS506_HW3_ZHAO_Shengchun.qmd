@@ -1,0 +1,367 @@
+---
+title: "STAT 506 HW 3"
+author: "ZHAO Shengchun"
+format: pdf
+editor: visual
+---
+
+## Github URL:
+
+<https://github.com/ZHAOShengchun67734538/STAT-506-HW-3>
+
+## Question 1
+
+**(a)**
+
+```{r}
+library(knitr)
+library(Hmisc)
+vix.data = sasxport.get("C:/Users/z1883/Desktop/VIX_D.XPT")
+nrow(vix.data)
+demo.data = sasxport.get("C:/Users/z1883/Desktop/DEMO_D.XPT")
+nrow(demo.data)
+```
+
+```{r}
+# Using the SEQN variable for merging.
+# Keep only records which matched.
+mix.data = merge(vix.data, demo.data,by = "seqn", all = FALSE)
+nrow(mix.data)
+```
+
+**(b)**
+
+```{r}
+# Check the NA data
+sum(is.na(mix.data$viq220))
+sum(is.na(mix.data$ridageyr))
+# From the output result, we need to do data clean
+```
+
+```{r}
+library(dplyr)
+new.data = filter(mix.data, !is.na(mix.data$viq220))
+nrow(new.data)
+```
+
+```{r}
+# find the range of age
+min(new.data$ridageyr)
+max(new.data$ridageyr)
+```
+
+```{r}
+age = c("10-19","20-29","30-39","40-49","50-59","60-69","70-79","80-89")
+proportion = c(1:8)*0
+lowerbound = 10
+upperbound = 19
+
+for(i in 1:8)
+{
+  d = new.data[which(new.data$ridageyr>=lowerbound & 
+                        new.data$ridageyr<=upperbound),]
+  # in the data document, the 1 means yes
+  n1 = nrow(d[which(d$viq220 == 1),])
+  n = nrow(d)
+  proportion[i] = n1/n
+  lowerbound = lowerbound + 10
+  upperbound = upperbound + 10
+}
+df = data.frame(age, proportion = proportion*100)
+library(knitr)
+kable(df)
+```
+
+**(c)**
+
+```{r}
+### (1) ###
+# in respond, if it = 9, treat as missing value and delete
+data = new.data[-which(new.data$viq220 == 9),]
+```
+
+```{r}
+d1 = cbind(data$viq220, data$ridageyr)
+subdata1 = as.data.frame(d1)
+colnames(subdata1) = c("viq220","age")
+# Check whether there exist NA values
+sum(is.na(subdata1$viq220))
+sum(is.na(subdata1$age))
+```
+
+```{r}
+# Construct the model
+subdata1$viq220 = as.factor(subdata1$viq220)
+model1 = glm(viq220 ~ age, data = subdata1, family = binomial)
+summary(model1)
+```
+
+```{r}
+### (2) ###
+d2 = cbind(data$viq220, data$ridageyr, data$ridreth1,data$riagendr)
+subdata2 = as.data.frame(d2)
+colnames(subdata2) = c("viq220","age","race", "gender")
+# Check whether there exist NA values
+sum(is.na(subdata2$viq220))
+sum(is.na(subdata2$age))
+sum(is.na(subdata2$race))
+sum(is.na(subdata2$gender))
+```
+
+```{r}
+# Construct the model
+subdata2$viq220 = as.factor(subdata2$viq220)
+subdata2$race = as.factor(subdata2$race)
+subdata2$gender = as.factor(subdata2$gender)
+model2 = glm(viq220 ~ age+race+gender, data = subdata2, family = binomial)
+summary(model2)
+```
+
+```{r}
+### (3) ###
+d3 = cbind(data$viq220,data$ridageyr,data$ridreth1,
+           data$riagendr,data$indfmpir)
+subdata3 = as.data.frame(d3)
+colnames(subdata3) = c("viq220","age","race", "gender", "pir")
+# Check whether there exist NA values
+sum(is.na(subdata3$viq220))
+sum(is.na(subdata3$age))
+sum(is.na(subdata3$race))
+sum(is.na(subdata3$gender))
+sum(is.na(subdata3$pir))
+# so, we need to do the data clean for variable pir
+```
+
+```{r}
+library(dplyr)
+new.subdata3 = filter(subdata3, !is.na(subdata3$pir))
+# Construct the model
+new.subdata3$viq220 = as.factor(new.subdata3$viq220)
+new.subdata3$race = as.factor(new.subdata3$race)
+new.subdata3$gender = as.factor(new.subdata3$gender)
+model3 = glm(viq220~age+race+gender+pir,data=new.subdata3,family = binomial)
+summary(model3)
+
+```
+
+```{r}
+# combine the result and output
+odds.ratios = cbind(
+  m1 = round(exp(coef(model1)),6),
+  m2 = round(exp(coef(model2)),6),
+  m3 = round(exp(coef(model3)),6)
+)
+odds.ratios
+odds.ratios[3:8,1] = 0
+odds.ratios[8,2] = 0
+odds.ratios
+
+sample.size = c(nobs(model1), nobs(model2), nobs(model3))
+
+# calculate the pseudo R^2
+null.model1 = glm(viq220 ~ 1, data = subdata1, family = binomial)
+pr2.m1 = 1-(as.numeric(logLik(model1))/as.numeric(logLik(null.model1)))
+
+null.model2 = glm(viq220 ~ 1, data = subdata2, family = binomial)
+pr2.m2 = 1-(as.numeric(logLik(model2))/as.numeric(logLik(null.model2)))
+
+null.model3 = glm(viq220 ~ 1, data = new.subdata3, family = binomial)
+pr2.m3 = 1-(as.numeric(logLik(model3))/as.numeric(logLik(null.model3)))
+pr2 = c(pr2.m1, pr2.m2, pr2.m3)
+
+AIC = c(model1$aic,model2$aic,model3$aic)
+
+result = rbind(odds.ratios,sample.size, AIC, pr2)
+result = as.data.frame(result)
+result = round(result, 6)
+result
+rownames(result) = c("Intercept","Age","Other Hispanic",
+                     "Non-Hispanic White","Non-Hispanic Black",
+                     "Other Race-Including Multi-Racial",
+                     "Female","PIR","Sample Size","AIC","Pseudo R^2")
+library(knitr)
+kable(result)
+```
+
+**(d)**
+
+```{r}
+### (1) ###
+# H0: the odds of men and women being wears of glasess/contact lenses 
+# for distance vision is not differ
+# H1: H0 is not true
+# alpha = 0.05
+summary(model3)
+```
+
+The summary result, the coefficient of female is log(odds) and its corresponding standard error, but they will give us the same test result. From the summary, we can find the log odds ratio is significant, which means odds of females wearing glasses/contacts for distance vision is statistically significantly lower than the odds for males.
+
+```{r}
+# (2) ###
+# H0: the the proportion of wearers of glasses/contact lenses 
+# for distance vision is not differs between men and women
+# H1: H0 is not true
+# alpha = 0.05
+table.gender = table(gender=new.subdata3$gender,viq220=new.subdata3$viq220)
+table.gender
+
+wear = table.gender[,"1"]
+total = rowSums(table.gender)
+test = prop.test(wear, total)
+test
+```
+
+From the result, we can find the p-value is less than 0.05, so, we should reject H0 and conclude that we have confidence to say the the proportion of wearers of glasses/contact lenses for distance vision differs between men and women.
+
+## Question 2
+
+First, import the data
+
+```{r}
+library(DBI)
+sakila = dbConnect(RSQLite::SQLite(), 
+                   "C:/Users/z1883/Desktop/sakila_master.db")
+dbListTables(sakila)
+dbListFields(sakila, "film")
+```
+
+**(a)**
+
+```{r}
+dbGetQuery(sakila, "SELECT release_year, count(release_year) FROM film
+                    GROUP BY release_year")
+```
+
+**(b)**
+
+```{r}
+# using R
+category = dbGetQuery(sakila, "SELECT * FROM category ")
+film.category = dbGetQuery(sakila, "SELECT * FROM film_category ")
+# do the right join
+category.table = merge(category, film.category, by = "category_id",all.y = TRUE)
+# convert the table to data frame
+t1 = as.data.frame(table(category.table$name))
+t1$Freq = as.numeric(as.character(t1$Freq))
+t1[which(t1$Freq == min(t1$Freq)),]
+```
+
+```{r}
+# using SQL
+dbListFields(sakila, "film_category")
+dbListFields(sakila, "category")
+
+dbGetQuery(sakila,"SELECT fc.category_id, c.name,
+                   count(fc.category_id) AS totalNumber 
+                   FROM film_category AS fc
+                   LEFT JOIN category AS c ON 
+                   fc.category_id = c.category_id
+                   GROUP BY fc.category_id
+                   ORDER BY totalNumber
+                   LIMIT 1")
+```
+
+**(c)**
+
+```{r}
+# using R
+customer = dbGetQuery(sakila, "SELECT * FROM customer")
+address = dbGetQuery(sakila, "SELECT * FROM address")
+city = dbGetQuery(sakila, "SELECT * FROM city")
+country = dbGetQuery(sakila, "SELECT * FROM country")
+m1 = merge(customer, address, by="address_id",all.x=TRUE)
+m2 = merge(m1, city, by="city_id", all.x=TRUE)
+m3 = merge(m2, country, by="country_id", all.x=TRUE)
+
+t2 = as.data.frame(table(m3$country))
+t2$Freq = as.numeric(as.character(t2$Freq))
+t2[which(t2$Freq == 13),]
+```
+
+```{r}
+dbGetQuery(sakila, 
+                   "SELECT co.country, count(co.country) AS Freq
+                    FROM country AS co
+                    RIGHT JOIN
+                    (SELECT country_id
+                    FROM city AS ci
+                    RIGHT JOIN
+                    (SELECT city_id
+                    FROM customer AS cu
+                    LEFT JOIN address AS ad
+                    ON cu.address_id = ad.address_id
+                    )AS ca ON ca.city_id = ci.city_id
+                    )AS ci1 ON ci1.country_id = co.country_id
+                    GROUP BY co.country
+                    HAVING Freq == 13")
+
+```
+
+## Question 3
+
+**(a)**
+
+```{r}
+data = read.csv("C:/Users/z1883/Desktop/us-500/us-500.csv",header = TRUE)
+nrow(data)
+sum(grepl(".com$", data$email))/nrow(data)
+```
+
+**(b)**
+
+```{r}
+# there are only one necessary "@" and one "." should be excluded
+# the other should remain, so, if the address have more than one "."
+# or "@", we just need to exclude once.
+d = gsub(pattern = "@", replacement = "", data$email)
+email = sub(pattern = "\\.", replacement = "", d)
+head(email)
+result = grepl("[^a-zA-Z0-9]", email)
+mean(result)
+```
+
+**(c)**
+
+```{r}
+# first let us check the digits of phone numbers
+table(nchar(data$phone1))
+table(nchar(data$phone2))
+# The phone number are all 12 digits,
+# So, the first 3 digits will be the are code
+p1.area = as.numeric(substr(data$phone1, 1,3))
+p2.area = as.numeric(substr(data$phone2, 1,3))
+p.area = c(p1.area,p2.area)
+area = as.data.frame(table(p.area))
+area$Freq = as.numeric(as.character(area$Freq))
+order.area = area[order(area$Freq, decreasing = TRUE),]
+order.area[1:5,]
+```
+
+**(d)**
+
+```{r}
+# we assume any number at the end of the an address is an apartment number.
+apa.num = data$address[grepl("[0-9]+$", data$address)]
+head(apa.num)
+num = gsub(".*(?:#|\\s)(\\d+)$", "\\1", apa.num)
+number = as.numeric(num)
+hist(log(number),main="Histogram of log of the apartment numbers")
+```
+
+**(e)**
+
+```{r}
+leading = substr(num, 1,1)
+lead.num = as.numeric(leading)
+lead.table = as.data.frame(table(lead.num))
+lead.table$Freq = as.numeric(as.character(lead.table$Freq))
+lead.table$lead.num = as.numeric(as.character(lead.table$lead.num))
+
+
+expected.prob = log10(1 + 1/(1:9))
+expected.freq = sum(lead.table$Freq)*expected.prob
+expected.freq
+cbind(lead.table, expected.freq)
+```
+
+From the result, we can find the distribution of leading digit of real numerical data does not follows the Benford's Law. It is more likely follows a uniform distribution. So, I think this apartment numbers would not pass as real data.
